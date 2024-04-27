@@ -6,7 +6,7 @@ _base_ = [
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_1x.py',
     '../_base_/datasets/hod3k_sa.py', './rtmdet_tta.py'
 ]
-load_from = '/data/users/litianhao/mmdetection/checkpoints/rtmdet_l_8xb32-300e_coco_20220719_112030-5a0be7c4.pth'
+load_from = 'checkpoints/rtmdet_l_8xb32-300e_coco_20220719_112030-5a0be7c4.pth'
 model = dict(
     type='RTMDet',
     data_preprocessor=dict(

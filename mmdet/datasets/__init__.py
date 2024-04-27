@@ -34,7 +34,7 @@ from .voc import VOCDataset
 from .wider_face import WIDERFaceDataset
 from .xml_style import XMLDataset
 from .youtube_vis_dataset import YouTubeVISDataset
-from .hod3k_sa import Hod3kSaDataset
+from .hod3k_sa import Hod3kSaDataset, Hod3k16bDataset
 
 __all__ = [
     'XMLDataset', 'CocoDataset', 'DeepFashionDataset', 'VOCDataset',
@@ -50,5 +50,5 @@ __all__ = [
     'BaseSegDataset', 'ADE20KSegDataset', 'CocoSegDataset',
     'ADE20KInstanceDataset', 'iSAIDDataset', 'V3DetDataset', 'ConcatDataset',
     'ODVGDataset', 'MDETRStyleRefCocoDataset', 'DODDataset',
-    'CustomSampleSizeSampler', 'Flickr30kDataset', 'Hod3kSaDataset'
+    'CustomSampleSizeSampler', 'Flickr30kDataset', 'Hod3kSaDataset', 'Hod3k16bDataset'
 ]

@@ -2,7 +2,8 @@
 from .data_preprocessor import (BatchFixedSizePad, BatchResize,
                                 BatchSyncRandomResize, BoxInstDataPreprocessor,
                                 DetDataPreprocessor,
-                                MultiBranchDataPreprocessor)
+                                MultiBranchDataPreprocessor, HyperspecImgDataPreprocessor,
+                                DetHyperspecDataPreprocessor)
 from .reid_data_preprocessor import ReIDDataPreprocessor
 from .track_data_preprocessor import TrackDataPreprocessor
 

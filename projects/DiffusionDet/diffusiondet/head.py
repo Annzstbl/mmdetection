@@ -35,6 +35,8 @@ _DEFAULT_SCALE_CLAMP = math.log(100000.0 / 16)
 def cosine_beta_schedule(timesteps, s=0.008):
     """Cosine schedule as proposed in
     https://openreview.net/forum?id=-NEXDKk8gZ."""
+    # 根据论文生成\bar\alpha_t
+    # 迭代相除生成\beta_t
     steps = timesteps + 1
     x = torch.linspace(0, timesteps, steps, dtype=torch.float64)
     alphas_cumprod = torch.cos(
@@ -46,13 +48,18 @@ def cosine_beta_schedule(timesteps, s=0.008):
 
 def extract(a, t, x_shape):
     """extract the appropriate t index for a batch of indices."""
+    # a: [1000]
+    # t: [1,]
+    # x_shape值:(n,4)
     batch_size = t.shape[0]
     out = a.gather(-1, t)
     return out.reshape(batch_size, *((1, ) * (len(x_shape) - 1)))
 
 
 class SinusoidalPositionEmbeddings(nn.Module):
-
+    '''
+        对时间t进行正弦编码
+    '''
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -62,9 +69,9 @@ class SinusoidalPositionEmbeddings(nn.Module):
         half_dim = self.dim // 2
         embeddings = math.log(10000) / (half_dim - 1)
         embeddings = torch.exp(
-            torch.arange(half_dim, device=device) * -embeddings)
-        embeddings = time[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+            torch.arange(half_dim, device=device) * -embeddings)#[half_dim]
+        embeddings = time[:, None] * embeddings[None, :]#[batch_size, half_dim]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)# [batch_size, dim]
         return embeddings
 
 
@@ -76,8 +83,8 @@ class DynamicDiffusionDetHead(nn.Module):
                  feat_channels=256,
                  num_proposals=500,
                  num_heads=6,
-                 prior_prob=0.01,
-                 snr_scale=2.0,
+                 prior_prob=0.01,#?这是什么
+                 snr_scale=2.0,# 信号尺度缩放[-snr_scale, snr_scale]
                  timesteps=1000,
                  sampling_timesteps=1,
                  self_condition=False,
@@ -134,7 +141,7 @@ class DynamicDiffusionDetHead(nn.Module):
         assert isinstance(timesteps, int), 'The type of `timesteps` should ' \
                                            f'be int but got {type(timesteps)}'
         assert sampling_timesteps <= timesteps
-        self.timesteps = timesteps
+        self.timesteps = timesteps #? 最大时间步长
         self.sampling_timesteps = sampling_timesteps
         self.snr_scale = snr_scale
 
@@ -209,9 +216,9 @@ class DynamicDiffusionDetHead(nn.Module):
         # Gaussian random feature embedding layer for time
         time_dim = feat_channels * 4
         self.time_mlp = nn.Sequential(
-            SinusoidalPositionEmbeddings(feat_channels),
-            nn.Linear(feat_channels, time_dim), nn.GELU(),
-            nn.Linear(time_dim, time_dim))
+            SinusoidalPositionEmbeddings(feat_channels),#[b,feat_channels]
+            nn.Linear(feat_channels, time_dim), nn.GELU(),#[b,time_dim]
+            nn.Linear(time_dim, time_dim))#[b, time_dim]
 
         self.prior_prob = prior_prob
         self.test_cfg = test_cfg
@@ -233,9 +240,9 @@ class DynamicDiffusionDetHead(nn.Module):
 
     def _build_diffusion(self):
         betas = cosine_beta_schedule(self.timesteps)
-        alphas = 1. - betas
-        alphas_cumprod = torch.cumprod(alphas, dim=0)
-        alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.)
+        alphas = 1. - betas #\alpha_{1->T}
+        alphas_cumprod = torch.cumprod(alphas, dim=0)#\alpha_cumprod_{1->T}
+        alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.)#alpha_cumprod_{0->T-1} alpha_cumprod_0默认为1，由于cos编码
 
         self.register_buffer('betas', betas)
         self.register_buffer('alphas_cumprod', alphas_cumprod)
@@ -262,6 +269,7 @@ class DynamicDiffusionDetHead(nn.Module):
         # the beginning of the diffusion chain
         self.register_buffer('posterior_log_variance_clipped',
                              torch.log(posterior_variance.clamp(min=1e-20)))
+        # 后验概率中计算均值的两个系数
         self.register_buffer(
             'posterior_mean_coef1',
             betas * torch.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod))
@@ -270,13 +278,17 @@ class DynamicDiffusionDetHead(nn.Module):
                              (1. - alphas_cumprod))
 
     def forward(self, features, init_bboxes, init_t, init_features=None):
-        time = self.time_mlp(init_t, )
+        '''
+            features: backbone提取的特征?
+            init_bboxes: 初始化框?
+        '''
+        time = self.time_mlp(init_t, )#[b, time_dim]
 
         inter_class_logits = []
         inter_pred_bboxes = []
 
         bs = len(features[0])
-        bboxes = init_bboxes
+        bboxes = init_bboxes#[b, numproposals, 4]
 
         if init_features is not None:
             init_features = init_features[None].repeat(1, bs, 1)
@@ -288,8 +300,8 @@ class DynamicDiffusionDetHead(nn.Module):
             class_logits, pred_bboxes, proposal_features = single_head(
                 features, bboxes, proposal_features, self.roi_extractor, time)
             if self.deep_supervision:
-                inter_class_logits.append(class_logits)
-                inter_pred_bboxes.append(pred_bboxes)
+                inter_class_logits.append(class_logits)#[bs, numprosoals, num_classes]
+                inter_pred_bboxes.append(pred_bboxes)#[bs, numprosoals, 4]
             bboxes = pred_bboxes.detach()
 
         if self.deep_supervision:
@@ -319,9 +331,9 @@ class DynamicDiffusionDetHead(nn.Module):
         batch_diff_bboxes = torch.stack([
             pred_instances.diff_bboxes_abs
             for pred_instances in batch_pred_instances
-        ])
+        ])# [bs, proposals, 4]
         batch_time = torch.stack(
-            [pred_instances.time for pred_instances in batch_pred_instances])
+            [pred_instances.time for pred_instances in batch_pred_instances])# [bs]
 
         pred_logits, pred_bboxes = self(x, batch_diff_bboxes, batch_time)
 
@@ -339,6 +351,14 @@ class DynamicDiffusionDetHead(nn.Module):
         return losses
 
     def prepare_training_targets(self, batch_data_samples):
+        '''
+            返回的都是按整个batch返回的
+            batch_gt_instances  gt实例
+            batch_pred_instances    生成的噪声框
+            batch_gt_instances_ignore
+            batch_img_metas
+
+        '''
         # hard-setting seed to keep results same (if necessary)
         # random.seed(0)
         # torch.manual_seed(0)
@@ -377,30 +397,43 @@ class DynamicDiffusionDetHead(nn.Module):
                 batch_gt_instances_ignore, batch_img_metas)
 
     def prepare_diffusion(self, gt_boxes, image_size):
+        '''
+            根据gt_bboxes生成随机框。
+            1. 把gt框放前边,把随机生成框放后边组成x_start (没有考虑numgt<= self.num_proposals)情况
+            2. 把所有框添加一个noise噪声 利用@func q_sample()实现
+
+            返回pred_instances
+                pred_instances.time
+                pred_instances.noise
+                pred_instances.diff_bboxes
+                pred_instances.diff_bboxes_abs
+        '''
         device = gt_boxes.device
         time = torch.randint(
-            0, self.timesteps, (1, ), dtype=torch.long, device=device)
-        noise = torch.randn(self.num_proposals, 4, device=device)
+            0, self.timesteps, (1, ), dtype=torch.long, device=device)# 时间采样
+        noise = torch.randn(self.num_proposals, 4, device=device)# 噪声采样
 
-        num_gt = gt_boxes.shape[0]
+        num_gt = gt_boxes.shape[0]# gt框数量
         if num_gt < self.num_proposals:
+            # 如果proposals的数量大于gt的话，则使用gt+随机采样生成proposals
             # 3 * sigma = 1/2 --> sigma: 1/6
             box_placeholder = torch.randn(
-                self.num_proposals - num_gt, 4, device=device) / 6. + 0.5
+                self.num_proposals - num_gt, 4, device=device) / 6. + 0.5# 以图像中心为均值分布 生成N(0.5, 0.5/3)的分布，3sigam原则
             box_placeholder[:, 2:] = torch.clip(
                 box_placeholder[:, 2:], min=1e-4)
             x_start = torch.cat((gt_boxes, box_placeholder), dim=0)
         else:
+            # 如果proposals的数量小于gt数量，则在gt中随机抽取proposals个框
             select_mask = [True] * self.num_proposals + \
                           [False] * (num_gt - self.num_proposals)
             random.shuffle(select_mask)
             x_start = gt_boxes[select_mask]
 
-        x_start = (x_start * 2. - 1.) * self.snr_scale
+        x_start = (x_start * 2. - 1.) * self.snr_scale#变成[-snr_scale, +snr_scale]的分布
 
         # noise sample
         x = self.q_sample(x_start=x_start, time=time, noise=noise)
-
+        # 限制x大小
         x = torch.clamp(x, min=-1 * self.snr_scale, max=self.snr_scale)
         x = ((x / self.snr_scale) + 1) / 2.
 
@@ -417,11 +450,14 @@ class DynamicDiffusionDetHead(nn.Module):
 
     # forward diffusion
     def q_sample(self, x_start, time, noise=None):
+        '''
+            为x_start添加时间时刻为time的噪声
+        '''
         if noise is None:
             noise = torch.randn_like(x_start)
 
         x_start_shape = x_start.shape
-
+        # 前传添加t时刻噪声
         sqrt_alphas_cumprod_t = extract(self.sqrt_alphas_cumprod, time,
                                         x_start_shape)
         sqrt_one_minus_alphas_cumprod_t = extract(
@@ -665,6 +701,12 @@ class DynamicDiffusionDetHead(nn.Module):
         return processed_results
 
     def prepare_testing_targets(self, batch_img_metas, device):
+        '''
+            time_pairs: 按照sampling_timesteps数量生成的, 指示从第几个时间回推到第几个时间
+            batch_noise_bboxes: 随机生成的目标框 xyxy
+            batch_noise_bboxes_raw: 随机生成的目标框的原始值N(0,1)
+            batch_image_size: 图像大小
+        '''
         # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == timesteps
         times = torch.linspace(
             -1, self.timesteps - 1, steps=self.sampling_timesteps + 1)
@@ -681,7 +723,7 @@ class DynamicDiffusionDetHead(nn.Module):
                                       dtype=torch.float32,
                                       device=device)
             noise_bboxes_raw = torch.randn((self.num_proposals, 4),
-                                           device=device)
+                                           device=device)#N(0,1)
             noise_bboxes = torch.clamp(
                 noise_bboxes_raw, min=-1 * self.snr_scale, max=self.snr_scale)
             noise_bboxes = ((noise_bboxes / self.snr_scale) + 1) / 2

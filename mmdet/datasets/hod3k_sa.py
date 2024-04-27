@@ -11,7 +11,7 @@ from .base_det_dataset import BaseDetDataset
 
 
 @DATASETS.register_module()
-class Hod3kSaDataset(BaseDetDataset):
+class Hod3kDataset(BaseDetDataset):
 
     """Dataset for COCO."""
 
@@ -169,3 +169,11 @@ class Hod3kSaDataset(BaseDetDataset):
                 valid_data_infos.append(data_info)
 
         return valid_data_infos
+    
+@DATASETS.register_module()
+class Hod3kSaDataset(Hod3kDataset):
+    pass
+
+@DATASETS.register_module()
+class Hod3k16bDataset(Hod3kDataset):
+    pass

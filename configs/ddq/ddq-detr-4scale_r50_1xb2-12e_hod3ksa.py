@@ -1,6 +1,7 @@
 _base_ = [
     '../_base_/datasets/hod3k_sa.py', '../_base_/default_runtime.py'
 ]
+load_from = '/data/users/litianhao01/mmdetection/checkpoints/ddq-detr-4scale_r50_8xb2-12e_coco_20230809_170711-42528127.pth'
 model = dict(
     type='DDQDETR',
     num_queries=900,  # num_matching_queries
