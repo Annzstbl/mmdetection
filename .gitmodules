@@ -1,0 +1,4 @@
+[submodule "mmcv"]
+	path = mmcv
+	url = https://github.com/Annzstbl/mmcv.git
+	branch = hyperspec
