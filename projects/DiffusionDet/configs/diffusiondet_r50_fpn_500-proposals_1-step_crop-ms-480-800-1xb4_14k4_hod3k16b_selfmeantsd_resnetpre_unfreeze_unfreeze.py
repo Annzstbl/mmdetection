@@ -30,7 +30,7 @@ model = dict(
         style='pytorch',
         in_channels=16,
         init_cfg=[dict(type='Kaiming', layer='Conv2d'), dict(type='Pretrained', checkpoint='torchvision://resnet50')],
-        hyper_init_cfg = dict(type='random3_zero', checkpoint='torchvision://resnet50')),
+        hyper_init_cfg = dict(type='unfreeze', checkpoint='torchvision://resnet50')),
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],

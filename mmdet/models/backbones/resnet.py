@@ -10,6 +10,8 @@ from torch.nn.modules.batchnorm import _BatchNorm
 from mmdet.registry import MODELS
 from ..layers import ResLayer
 
+from mmengine.runner.checkpoint import _load_checkpoint
+from torch import zeros_like, randperm
 
 class BasicBlock(BaseModule):
     expansion = 1
@@ -667,27 +669,70 @@ class HyperResNet(ResNet):
         self.hyper_init_cfg = hyper_init_cfg
         
     def init_weights(self):
+        '''
+            到这里, 第一层应该是被随机初始化过的
+            
+            copy: 按顺序依次复制原有参数
+            copy_mean: 原始参数均值,复制给新的每一层
+            random3: 随机复制给其中的三层
+            random3_zero:随机复制给其中的三层, 其他层置零
+            unfreeze: 采取默认初始化的参数, 只完成解冻操作
+        '''
         super(HyperResNet, self).init_weights()
         # hyper init 主要针对第一层的初始化
         if self.hyper_init_cfg is not None:
             # 只支持dict
             assert isinstance(self.hyper_init_cfg, dict)
             # 判断包含'checkpoint' key
-            assert 'checkpoint' in self.hyper_init_cfg
-            from mmengine.runner.checkpoint import _load_checkpoint
+            assert 'checkpoint' in self.hyper_init_cfg and 'type' in self.hyper_init_cfg
             # 从checkpoint中加载模型
             checkpoint = _load_checkpoint(self.hyper_init_cfg['checkpoint'])
+            # type
+            hyper_init_type = self.hyper_init_cfg['type']
             # 加载模型
             # get state_dict from checkpoint
             if 'state_dict' in checkpoint:
                 state_dict = checkpoint['state_dict']
             else:
                 state_dict = checkpoint
-            # 加载第一层
-            state_dict_conv1 = state_dict['conv1.weight'] # [out_channel, 3, 7, 7]
+            # 加载第一层,并转到gpu
+            state_dict_conv1 = state_dict['conv1.weight'].to(self.conv1.weight.device) # [out_channel, 3, 7, 7]  
+            dst_conv1 = self.conv1.weight.data
+            # dst_conv1 = zeros_like(self.conv1.weight.data).to(self.conv1.weight.device)
+            in_channel = dst_conv1.shape[1]
             
+            if hyper_init_type == 'copy':
+                for i in range(in_channel//3):
+                    dst_conv1[:, i*3:(i+1)*3, :, :] = state_dict_conv1
+                dst_conv1[:,in_channel//3*3:in_channel,:,:] = state_dict_conv1[:,:in_channel%3,:,:]
+            elif hyper_init_type == 'copy_mean':
+                state_dict_conv1_mean = state_dict_conv1.mean(dim=1)
+                for i in range(in_channel):
+                    dst_conv1[:, i, :, :] = state_dict_conv1_mean
+            elif hyper_init_type == 'random3':
+                index = randperm(in_channel)[:3]
+                dst_conv1[:, index, :, :] = state_dict_conv1
+            elif hyper_init_type == 'random3_zero':
+                index = randperm(in_channel)[:3]
+                dst_conv1[:, index, :, :] = state_dict_conv1
+                dst_conv1[:, [i for i in range(in_channel) if i not in index], :, :] = 0
+            elif hyper_init_type == 'unfreeze':
+                pass
+            else :
+                raise ValueError(f'Unsupported hyper_init_type: {hyper_init_type}')
             
-            
+            # dst_conv1 = nn.Parameter(dst_conv1)
+            # dst_conv1.requires_grad = self.conv1.weight.requires_grad
+            # self.conv1.weight = dst_conv1
+            self.conv1.weight.data=dst_conv1
+        # 解冻
+        self._unfreeze_stages_hyper()
+        
+    def _unfreeze_stages_hyper(self):
+        self.norm1.train()
+        for m in [self.conv1, self.norm1]:
+            for param in m.parameters():
+                param.requires_grad = True
             
             
             

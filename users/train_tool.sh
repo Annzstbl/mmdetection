@@ -57,7 +57,13 @@ work_dirs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_10k8_ho
 --out work_dirs/vis_plot/mAP_diffdet_1.pdf
 
 # train and train
-CUDA_VISIBLE_DEVICES=3 python tools/train.py \
-projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3k16b_selfmeantsd_resnetpre_firstrandom.py \
-&& CUDA_VISIBLE_DEVICES=3 python tools/train.py \
-projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3ksa_selfmeanstd_resnetpre.py
+CUDA_VISIBLE_DEVICES=0 python tools/train.py \
+projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3k16b_selfmeantsd_resnetpre_unfreeze_copy.py \
+&& CUDA_VISIBLE_DEVICES=0 python tools/train.py \
+projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3k16b_selfmeantsd_resnetpre_unfreeze_copymean.py \
+&& CUDA_VISIBLE_DEVICES=0 python tools/train.py \
+projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3k16b_selfmeantsd_resnetpre_unfreeze_random3-zero.py \
+&& CUDA_VISIBLE_DEVICES=2 python tools/train.py \
+projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3k16b_selfmeantsd_resnetpre_unfreeze_random3.py \
+&& CUDA_VISIBLE_DEVICES=2 python tools/train.py \
+projects/DiffusionDet/configs/diffusiondet_r50_fpn_500-proposals_1-step_crop-ms-480-800-1xb4_14k4_hod3k16b_selfmeantsd_resnetpre_unfreeze_unfreeze.py \
