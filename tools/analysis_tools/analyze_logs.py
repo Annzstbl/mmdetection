@@ -194,6 +194,50 @@ def load_json_logs(json_logs):
 
     return log_dicts
 
+# 处理IterBasedTrainLoop
+def load_json_logs_iter_based_train_loop(json_logs):
+    # load and convert json_logs to log_dict, key is epoch, value is a sub dict
+    # keys of sub dict is different metrics, e.g. memory, bbox_mAP
+    # value of sub dict is a list of corresponding values of all iterations
+    log_dicts = [dict() for _ in json_logs]
+    for json_log, log_dict in zip(json_logs, log_dicts):
+        with open(json_log, 'r') as log_file:
+            epoch = 1
+            for i, line in enumerate(log_file):
+                log = json.loads(line.strip())
+                val_flag = False
+                # skip lines only contains one key
+                if not len(log) > 1:
+                    continue
+
+                if epoch not in log_dict:
+                    log_dict[epoch] = defaultdict(list)
+
+                for k, v in log.items():
+                    if '/' in k:
+                        log_dict[epoch][k.split('/')[-1]].append(v)
+                        val_flag = True
+                    elif val_flag:
+                        continue
+                    else:
+                        log_dict[epoch][k].append(v)
+
+                if 'lr' not in log.keys():
+                    epoch += 1
+
+    return log_dicts
+
+def check_epoch_or_iter_based_train_loop(json_logs):
+    with open(json_logs[0], 'r') as log_file:
+        for i, line in enumerate(log_file):
+            log = json.loads(line.strip())
+            if not len(log) > 1:
+                continue
+            if 'epoch' in log.keys():
+                return load_json_logs
+            else:
+                return load_json_logs_iter_based_train_loop
+            
 
 def main():
     args = parse_args()
@@ -202,7 +246,7 @@ def main():
     for json_log in json_logs:
         assert json_log.endswith('.json')
 
-    log_dicts = load_json_logs(json_logs)
+    log_dicts = check_epoch_or_iter_based_train_loop(json_logs)(json_logs)
 
     eval(args.task)(log_dicts, args)
 

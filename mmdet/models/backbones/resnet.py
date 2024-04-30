@@ -656,7 +656,42 @@ class ResNet(BaseModule):
                 if isinstance(m, _BatchNorm):
                     m.eval()
 
+@MODELS.register_module()
+class HyperResNet(ResNet):
+    """HyperResNet backbone.
+        inherit from ResNet
+    """
 
+    def __init__(self, depth, hyper_init_cfg=None, **kwargs,):
+        super(HyperResNet, self).__init__(depth, **kwargs)
+        self.hyper_init_cfg = hyper_init_cfg
+        
+    def init_weights(self):
+        super(HyperResNet, self).init_weights()
+        # hyper init 主要针对第一层的初始化
+        if self.hyper_init_cfg is not None:
+            # 只支持dict
+            assert isinstance(self.hyper_init_cfg, dict)
+            # 判断包含'checkpoint' key
+            assert 'checkpoint' in self.hyper_init_cfg
+            from mmengine.runner.checkpoint import _load_checkpoint
+            # 从checkpoint中加载模型
+            checkpoint = _load_checkpoint(self.hyper_init_cfg['checkpoint'])
+            # 加载模型
+            # get state_dict from checkpoint
+            if 'state_dict' in checkpoint:
+                state_dict = checkpoint['state_dict']
+            else:
+                state_dict = checkpoint
+            # 加载第一层
+            state_dict_conv1 = state_dict['conv1.weight'] # [out_channel, 3, 7, 7]
+            
+            
+            
+            
+            
+            
+            
 @MODELS.register_module()
 class ResNetV1d(ResNet):
     r"""ResNetV1d variant described in `Bag of Tricks
